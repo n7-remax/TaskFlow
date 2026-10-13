@@ -2,6 +2,7 @@
   "name": "taskflow",
   "private": true,
   "description": "TaskFlow — a Trello-style project management app built with Next.js, Redux Toolkit, Express and Prisma.",
+  "type": "module",
   "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=22.12.0"
@@ -10,10 +11,15 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "test": "turbo run test"
+    "lint": "eslint . && turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@taskflow/config": "workspace:*",
+    "eslint": "^10.12.0",
+    "prettier": "^3.6.2",
     "turbo": "^2.11.7",
     "typescript": "~6.0.3"
   }
