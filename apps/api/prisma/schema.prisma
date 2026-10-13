@@ -1,4 +1,11 @@
-// Models arrive in Phase 2 (data models). The connection URL lives in prisma.config.ts.
+// The connection URL lives in prisma.config.ts.
+//
+// Conventions:
+// - Tables and columns are snake_case in Postgres, camelCase in Prisma.
+// - Ids are UUIDv7 (time-ordered, so they index well), timestamps are timestamptz.
+// - Enum values mirror packages/contracts (TASK_STATUSES, PRIORITIES, ROLES); a test keeps them in sync.
+// - Deletes cascade only down the containment tree (workspace → project → task → comment).
+//   Every reference to a user is RESTRICT, so deleting a user never removes workspace data.
 
 generator client {
   provider            = "prisma-client"
@@ -10,4 +17,174 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+
+  @@map("task_status")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("priority")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@map("role")
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  /// Always stored lowercased (enforced by a CHECK constraint).
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions          Session[]
+  memberships       WorkspaceMember[]
+  createdWorkspaces Workspace[]       @relation("WorkspaceCreatedBy")
+  createdProjects   Project[]         @relation("ProjectCreatedBy")
+  assignedTasks     Task[]            @relation("TaskAssignee")
+  reportedTasks     Task[]            @relation("TaskReporter")
+  comments          TaskComment[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  /// SHA-256 of the cookie token; the raw token is never stored.
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Sessions are credentials, not workspace data, so they go away with the user.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Workspace {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  slug        String   @unique
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User              @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  members   WorkspaceMember[]
+  projects  Project[]
+
+  @@index([createdById])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  role        Role     @default(MEMBER)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // The unique index leads with workspace_id, so it also serves workspace lookups.
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model Project {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  name           String
+  /// Short uppercase prefix for task ids, e.g. WEB → WEB-42. Unique per workspace.
+  key            String
+  description    String?
+  /// Hex colour, e.g. #6366F1.
+  color          String    @default("#6366F1")
+  /// Next value for Task.number; incremented atomically when a task is created.
+  nextTaskNumber Int       @default(1) @map("next_task_number")
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  tasks     Task[]
+
+  @@unique([workspaceId, key])
+  @@index([createdById])
+  @@map("projects")
+}
+
+model Task {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  projectId   String     @map("project_id") @db.Uuid
+  /// Per-project sequence number (WEB-42), taken from Project.nextTaskNumber.
+  number      Int
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+  /// Fractional index (fractional-indexing) ordering tasks within a status column.
+  /// The column uses COLLATE "C" so Postgres sorts it byte-wise, like the library does.
+  rank        String
+  /// Optimistic concurrency token; bumped on every update.
+  version     Int        @default(1)
+  assigneeId  String?    @map("assignee_id") @db.Uuid
+  reporterId  String     @map("reporter_id") @db.Uuid
+  dueDate     DateTime?  @map("due_date") @db.Date
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt DateTime?  @map("completed_at") @db.Timestamptz(3)
+
+  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  reporter User          @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  comments TaskComment[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status, rank])
+  @@index([assigneeId])
+  @@index([reporterId])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model TaskComment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@index([authorId])
+  @@map("task_comments")
 }

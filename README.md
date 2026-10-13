@@ -2,7 +2,7 @@
 
 A Trello-style project management app: workspaces, projects and a drag-and-drop Kanban board for small teams. It's a portfolio project that shows **Redux Toolkit + RTK Query**, **Next.js App Router** and a layered **Node.js/Express** API on **PostgreSQL**, and its commit history records each step of the build.
 
-> **Status:** Phase 1 (foundation) is done. The monorepo, both apps, shared contracts, the database, health checks and CI are wired up. Auth, workspaces and the board come in later phases.
+> **Status:** Phases 1 (foundation) and 2 (data models) are done. The monorepo, both apps, shared contracts, health checks, CI and the full Prisma schema with migrations and demo seed data are in place. Auth, workspaces and the board come in later phases.
 
 ## Stack
 
@@ -23,13 +23,13 @@ A Trello-style project management app: workspaces, projects and a drag-and-drop 
 ```text
 apps/
   api/                Express API
-    prisma/           schema.prisma (models arrive in Phase 2)
+    prisma/           schema.prisma, migrations/, seed.ts (see docs/database.md)
     prisma.config.ts  Prisma CLI config (schema path, migrations, DATABASE_URL)
     src/
       app.ts          createApp(): middleware, /api/v1 router, 404 + error handler
       server.ts       HTTP server + graceful shutdown
       config/env.ts   Zod-validated environment (fails fast on bad config)
-      common/         logger, HttpError
+      common/         logger, HttpError, argon2id password hashing
       middleware/     error-handler, not-found
       modules/<domain>/{routes,controller,service}.ts
       prisma/client.ts
@@ -37,6 +37,7 @@ apps/
 packages/
   contracts/          Zod enums (TaskStatus, Priority, Role), response/error envelopes, DTOs
   config/             shared tsconfig, ESLint and Prettier presets
+docs/database.md      ER diagram, constraints, indexes and seed data
 docker-compose.yml    Postgres 16 (dev DB `taskflow` + test DB `taskflow_test`)
 ```
 
@@ -50,6 +51,8 @@ The API is layered as routes → controllers (HTTP only) → services (business 
 pnpm install                       # also installs the git hooks
 cp apps/api/.env.example apps/api/.env
 pnpm db:up                         # Postgres 16 on localhost:5544
+pnpm db:migrate                    # apply migrations
+pnpm db:seed                       # demo users, workspace, project and tasks
 pnpm dev                           # web on :4400, API on :4401, contracts in watch mode
 ```
 
@@ -83,8 +86,14 @@ Run from the repo root. Turborepo runs each one in dependency order across all p
 | `pnpm test`                    | Vitest; API tests need `pnpm db:up`                           |
 | `pnpm format` / `format:check` | Prettier                                                      |
 | `pnpm db:up` / `db:down`       | Start or stop Postgres                                        |
+| `pnpm db:migrate`              | Apply migrations; with `--name x`, create one from the schema |
+| `pnpm db:seed`                 | Load demo users, workspace, project and tasks (re-runnable)   |
+| `pnpm db:reset`                | Drop the dev DB, re-apply migrations and seed                 |
+| `pnpm db:studio`               | Open Prisma Studio                                            |
 
-API tests use the `taskflow_test` database by default. Point them somewhere else with `TEST_DATABASE_URL`.
+API tests use the `taskflow_test` database by default and apply pending migrations to it before running. Point them somewhere else with `TEST_DATABASE_URL`.
+
+The data model (ER diagram, constraints, indexes, demo accounts) is documented in [docs/database.md](docs/database.md).
 
 ## Commit conventions
 
@@ -95,7 +104,7 @@ Each phase is built on its own branch as a series of small commits and merged wi
 ## Roadmap
 
 1. **Foundation**: monorepo, apps, contracts, Docker Postgres, health checks, tooling, CI ✅
-2. Data models: Prisma schema, migrations, seed data
+2. **Data models**: Prisma schema, migrations, seed data ✅
 3. Auth: sessions in HttpOnly cookies, argon2id, rate limiting, login/register pages
 4. Workspaces and access control
 5. Projects
