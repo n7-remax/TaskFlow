@@ -6,6 +6,8 @@ import { pinoHttp } from 'pino-http';
 
 import { logger } from './common/logger.js';
 import { env } from './config/env.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { notFound } from './middleware/not-found.js';
 
 export function createApp(): Express {
   const app = express();
@@ -31,6 +33,9 @@ export function createApp(): Express {
 
   const v1 = express.Router();
   app.use('/api/v1', v1);
+
+  app.use(notFound);
+  app.use(errorHandler);
 
   return app;
 }
