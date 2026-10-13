@@ -8,6 +8,7 @@ import { logger } from './common/logger.js';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
+import { healthRouter } from './modules/health/routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -32,6 +33,7 @@ export function createApp(): Express {
   app.use(cookieParser());
 
   const v1 = express.Router();
+  v1.use('/health', healthRouter);
   app.use('/api/v1', v1);
 
   app.use(notFound);
