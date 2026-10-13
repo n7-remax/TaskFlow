@@ -18,7 +18,10 @@
     "prepare": "husky",
     "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
-    "db:seed": "pnpm --filter @taskflow/api db:seed"
+    "db:migrate": "pnpm --filter @taskflow/api db:migrate",
+    "db:seed": "pnpm --filter @taskflow/api db:seed",
+    "db:reset": "pnpm --filter @taskflow/api db:reset",
+    "db:studio": "pnpm --filter @taskflow/api db:studio"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
