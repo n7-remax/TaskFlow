@@ -1,0 +1,20 @@
+{
+  "name": "taskflow",
+  "private": true,
+  "description": "TaskFlow — a Trello-style project management app built with Next.js, Redux Toolkit, Express and Prisma.",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.7",
+    "typescript": "~6.0.3"
+  }
+}
