@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "db:up": "docker compose up -d --wait postgres",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "db:seed": "pnpm --filter @taskflow/api db:seed"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
